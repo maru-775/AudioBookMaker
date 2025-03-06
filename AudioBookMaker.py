@@ -8,6 +8,7 @@ import re
 import logging
 import subprocess
 import PyPDF2
+import glob
 
 # Use Coqui TTS instead of TTS
 from TTS.api import TTS
@@ -93,28 +94,90 @@ class EbookToAudioConverter:
                     processed_blocks.append(sentence)
         return processed_blocks
     
+    def check_existing_temp_files(self, book_title):
+        """Check for existing temporary audio files from previous executions"""
+        temp_pattern = os.path.join(self.output_dir, "temp_audio_*.wav")
+        existing_temp_files = sorted(glob.glob(temp_pattern), 
+                                     key=lambda x: int(re.search(r'temp_audio_(\d+)\.wav', x).group(1)))
+        
+        if existing_temp_files:
+            self.logger.info(f"Found {len(existing_temp_files)} existing temporary audio files")
+            return existing_temp_files
+        return []
+    
     def generate_audio(self, text_blocks, book_title):
         output_filename = f"{book_title}_audiobook.mp3"
         output_path = os.path.join(self.output_dir, output_filename)
+        
+        # Check for existing temporary files
+        existing_temp_files = self.check_existing_temp_files(book_title)
+        
+        if existing_temp_files:
+            user_input = input(f"Found {len(existing_temp_files)} existing temporary audio files. "
+                             f"Use them (y/n)? ")
+            if user_input.lower() == 'y':
+                self.logger.info("Using existing temporary audio files")
+                self._concatenate_audio_files(existing_temp_files, output_path)
+                
+                # Ask if cleanup is desired
+                cleanup = input("Do you want to delete the temporary files after completion? (y/n): ")
+                if cleanup.lower() == 'y':
+                    for temp_file in existing_temp_files:
+                        os.remove(temp_file)
+                    self.logger.info("Temporary files removed")
+                
+                self.logger.info(f"Audiobook generated: {output_path}")
+                return
+        
+        # No existing files or user chose not to use them
         temp_audio_files = []
+        try:
+            # Find the starting index to resume from
+            start_idx = 0
+            if existing_temp_files:
+                highest_idx = max([int(re.search(r'temp_audio_(\d+)\.wav', file).group(1)) 
+                                  for file in existing_temp_files])
+                start_idx = highest_idx + 1
+            
+            for i, block in enumerate(text_blocks[start_idx:], start=start_idx):
+                try:
+                    temp_file = os.path.join(self.output_dir, f'temp_audio_{i}.wav')
+                    self.logger.info(f"Generating audio for block {i}/{len(text_blocks)}")
+                    
+                    # Ensure you have a reference voice sample 'sample.wav' in the same directory
+                    self.tts_model.tts_to_file(
+                        text=block,
+                        file_path=temp_file,
+                        speaker_wav="sample.wav",  # Make sure this file exists
+                        language=self.language
+                    )
+                    temp_audio_files.append(temp_file)
+                except Exception as e:
+                    self.logger.error(f"Error generating audio for block {i}: {e}")
+                    # Continue with the next block instead of stopping entirely
+            
+            # Combine all audio files (existing + newly generated)
+            all_temp_files = sorted(glob.glob(os.path.join(self.output_dir, "temp_audio_*.wav")), 
+                                    key=lambda x: int(re.search(r'temp_audio_(\d+)\.wav', x).group(1)))
+            
+            self.logger.info(f"Concatenating {len(all_temp_files)} audio files")
+            self._concatenate_audio_files(all_temp_files, output_path)
+            
+            # Ask if cleanup is desired
+            cleanup = input("Do you want to delete the temporary files after completion? (y/n): ")
+            if cleanup.lower() == 'y':
+                for temp_file in all_temp_files:
+                    os.remove(temp_file)
+                self.logger.info("Temporary files removed")
+            
+        except KeyboardInterrupt:
+            self.logger.info("Process interrupted. Temporary files are saved and can be used in the next run.")
+            return
+        except Exception as e:
+            self.logger.error(f"Error during audio generation: {e}")
+            self.logger.info("Temporary files are saved and can be used in the next run.")
+            return
         
-        for i, block in enumerate(text_blocks):
-            try:
-                temp_file = os.path.join(self.output_dir, f'temp_audio_{i}.wav')
-                # Ensure you have a reference voice sample 'sample.wav' in the same directory
-                self.tts_model.tts_to_file(
-                    text=block,
-                    file_path=temp_file,
-                    speaker_wav="sample.wav",  # Make sure this file exists
-                    language=self.language
-                )
-                temp_audio_files.append(temp_file)
-            except Exception as e:
-                self.logger.error(f"Error generating audio for block {i}: {e}")
-        
-        self._concatenate_audio_files(temp_audio_files, output_path)
-        for temp_file in temp_audio_files:
-            os.remove(temp_file)
         self.logger.info(f"Audiobook generated: {output_path}")
     
     def _concatenate_audio_files(self, input_files, output_file):
@@ -123,14 +186,16 @@ class EbookToAudioConverter:
                 # Ensure the path is correctly formatted
                 f.write(f"file '{os.path.abspath(file)}'\n")
         try:
-            subprocess.run([
-                'ffmpeg',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', 'file_list.txt',
-                '-c', 'copy',
+            command = [
+                "ffmpeg",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", 'file_list.txt',
+                "-c:a", "libmp3lame",
+                "-b:a", "128k",
                 output_file
-            ], check=True)
+            ]
+            subprocess.run(command, check=True)
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Audio concatenation failed: {e}")
         finally:
@@ -150,6 +215,7 @@ class EbookToAudioConverter:
 
         text_blocks = self.preprocess_text(text)
         self.generate_audio(text_blocks, book_title)
+
 
 if __name__ == "__main__":
     converter = EbookToAudioConverter()
