@@ -10,8 +10,12 @@ services:
       - ./backend/src:/app/src
       - ./backend/jobs.db:/app/jobs.db
     environment:
-      - DEVICE=cpu # Change to cuda if GPU available
+      - DEVICE=auto # Change to cuda if GPU available
       - COQUI_TOS_AGREED=1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
 
   frontend:
     build:
@@ -22,4 +26,25 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  worker:
+    build: ./backend
+    command: celery -A src.core.worker.celery_app worker --loglevel=info
+    volumes:
+      - ./backend/audiobooks:/app/audiobooks
+      - ./backend/src:/app/src
+      - ./backend/jobs.db:/app/jobs.db
+    environment:
+      - DEVICE=auto
+      - COQUI_TOS_AGREED=1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
       - backend
