@@ -1,6 +1,0 @@
-coqui-tts
-PyPDF2
-torch
-nltk
-ebooklib
-beautifulsoup4 
