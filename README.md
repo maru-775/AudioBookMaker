@@ -7,7 +7,7 @@ AudioBookMaker is a modern, full-stack web application that converts eBooks (EPU
 ### Core Capabilities
 - **Multi-Format Support**: Convert EPUB and PDF files to audiobooks
 - **Multilingual TTS**: Support for multiple languages using Coqui XTTS v2
-- **Voice Cloning**: Optional voice cloning using sample audio files for personalized narration
+- **Voice Cloning**: Optional voice cloning using sample audio files or browser recording for personalized narration
 - **Asynchronous Processing**: Background job processing with Celery workers
 - **Real-time Progress Tracking**: Monitor conversion progress in real-time
 - **Resume Capability**: Automatically resume interrupted conversions
@@ -20,6 +20,7 @@ AudioBookMaker is a modern, full-stack web application that converts eBooks (EPU
 - **Hardware Acceleration**: Automatic GPU detection (CUDA, MPS) with CPU fallback
 - **Docker Support**: Containerized deployment with Docker Compose
 - **Blob Storage Ready**: Configurable for cloud storage (S3, etc.)
+- **In-Browser Voice Recording**: Record voice samples directly in the browser (up to 10 seconds)
 
 ## Architecture
 
@@ -48,6 +49,7 @@ The application consists of four main components:
 - **Tailwind CSS 4** - Utility-first CSS framework
 - **Axios** - HTTP client for API requests
 - **Lucide React** - Icon library
+- **Web Audio API** - Browser-based voice recording
 
 ## Getting Started
 
@@ -149,17 +151,21 @@ The application consists of four main components:
 
 1. **Upload an eBook:**
    - Navigate to [http://localhost:3000](http://localhost:3000)
-   - Select an EPUB or PDF file
-   - Optionally upload a voice sample (WAV format recommended)
+   - Select an EPUB or PDF file (or paste text directly)
+   - Optionally provide a voice sample:
+     - **Upload**: Choose a WAV or MP3 file (recommended 10 seconds)
+     - **Record**: Record your voice directly in the browser (up to 10 seconds)
 
 2. **Configure conversion:**
    - Select target language
    - Adjust speech speed if desired
+   - Enable "Preview Mode" to convert only the first paragraph
    - Click "Create Audiobook"
 
 3. **Monitor progress:**
    - View real-time progress in the job history panel
    - Download completed audiobooks directly from the interface
+   - Refresh job history manually using the refresh button
 
 ### API Usage
 
@@ -224,7 +230,6 @@ The application automatically detects available hardware:
 - **CPU**: Set `DEVICE=cpu`
 - **Auto-detect**: Set `DEVICE=auto` (recommended)
 
-
 ### Docker Production Build
 
 ```bash
@@ -259,7 +264,8 @@ AudioBookMaker/
 │   ├── src/
 │   │   ├── app/          # Next.js app router pages
 │   │   ├── components/   # React components
-│   │   │   └── ui/       # shadcn/ui components
+│   │   │   ├── ui/       # shadcn/ui components
+│   │   │   └── VoiceRecorder.tsx  # Voice recording component
 │   │   └── lib/          # Utilities and API client
 │   ├── public/           # Static assets
 │   ├── package.json
@@ -275,11 +281,9 @@ AudioBookMaker/
 2. **Workers**: Add tasks in `backend/src/core/worker.py`
 3. **Frontend**: Create components in `frontend/src/components/`
 
-
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
 
 ## Support
 

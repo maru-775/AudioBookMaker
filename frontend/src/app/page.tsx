@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, FileAudio, CheckCircle, AlertCircle, Loader2, Play, Download, Trash2, RefreshCw } from "lucide-react";
+import { Upload, FileAudio, CheckCircle, AlertCircle, Loader2, Play, Download, Trash2, RefreshCw, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { uploadFile, getStatus, getDownloadUrl, getJobs } from "@/lib/api";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"file" | "text">("file");
@@ -21,6 +22,7 @@ export default function Home() {
 
   const [speakerFile, setSpeakerFile] = useState<File | null>(null);
   const speakerInputRef = useRef<HTMLInputElement>(null);
+  const [voiceInputMethod, setVoiceInputMethod] = useState<"upload" | "record">("upload");
 
   const [preview, setPreview] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -165,8 +167,8 @@ export default function Home() {
             <div className="flex border-4 border-border neo-shadow-sm">
               <button
                 className={`flex-1 py-4 font-black uppercase tracking-wide transition-all ${activeTab === "file"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background hover:bg-muted"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background hover:bg-muted"
                   }`}
                 onClick={() => setActiveTab("file")}
               >
@@ -175,8 +177,8 @@ export default function Home() {
               <div className="w-1 bg-border"></div>
               <button
                 className={`flex-1 py-4 font-black uppercase tracking-wide transition-all ${activeTab === "text"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background hover:bg-muted"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background hover:bg-muted"
                   }`}
                 onClick={() => setActiveTab("text")}
               >
@@ -188,8 +190,8 @@ export default function Home() {
             {activeTab === "file" && (
               <div
                 className={`border-4 border-dashed rounded-none p-12 text-center transition-all cursor-pointer group ${file
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary hover:bg-muted"
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary hover:bg-muted"
                   }`}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handleDrop}
@@ -242,29 +244,69 @@ export default function Home() {
               </div>
             )}
 
-            {/* Speaker Selection */}
+            {/* Voice Sample Selection */}
             <div className="space-y-3">
               <label className="text-sm font-black uppercase tracking-wide">
                 Voice Sample (Optional)
               </label>
-              <div
-                className="border-4 border-border p-4 flex items-center justify-between cursor-pointer hover:bg-muted transition-all neo-shadow-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
-                onClick={() => speakerInputRef.current?.click()}
-              >
-                <input
-                  type="file"
-                  ref={speakerInputRef}
-                  className="hidden"
-                  accept=".wav,.mp3"
-                  onChange={handleSpeakerFileChange}
-                />
-                <span className="font-bold truncate max-w-[200px]">
-                  {speakerFile ? speakerFile.name : "UPLOAD WAV SAMPLE (10s)"}
-                </span>
-                <div className="bg-secondary text-secondary-foreground px-3 py-1 font-bold text-xs border-2 border-border uppercase">
-                  Browse
-                </div>
+
+              {/* Voice Input Method Tabs */}
+              <div className="flex border-4 border-border neo-shadow-sm">
+                <button
+                  className={`flex-1 py-3 font-black uppercase text-sm tracking-wide transition-all ${voiceInputMethod === "upload"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                    }`}
+                  onClick={() => setVoiceInputMethod("upload")}
+                >
+                  <Upload className="inline-block w-4 h-4 mr-2" />
+                  Upload
+                </button>
+                <div className="w-1 bg-border"></div>
+                <button
+                  className={`flex-1 py-3 font-black uppercase text-sm tracking-wide transition-all ${voiceInputMethod === "record"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                    }`}
+                  onClick={() => setVoiceInputMethod("record")}
+                >
+                  <Mic className="inline-block w-4 h-4 mr-2" />
+                  Record
+                </button>
               </div>
+
+              {/* Upload Tab */}
+              {voiceInputMethod === "upload" && (
+                <div
+                  className="border-4 border-border p-4 flex items-center justify-between cursor-pointer hover:bg-muted transition-all neo-shadow-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                  onClick={() => speakerInputRef.current?.click()}
+                >
+                  <input
+                    type="file"
+                    ref={speakerInputRef}
+                    className="hidden"
+                    accept=".wav,.mp3"
+                    onChange={handleSpeakerFileChange}
+                  />
+                  <span className="font-bold truncate max-w-[200px]">
+                    {speakerFile ? speakerFile.name : "UPLOAD WAV/MP3 SAMPLE"}
+                  </span>
+                  <div className="bg-secondary text-secondary-foreground px-3 py-1 font-bold text-xs border-2 border-border uppercase">
+                    Browse
+                  </div>
+                </div>
+              )}
+
+              {/* Record Tab */}
+              {voiceInputMethod === "record" && (
+                <VoiceRecorder
+                  onRecordingComplete={(file) => {
+                    setSpeakerFile(file);
+                    setVoiceInputMethod("upload"); // Switch back to show the file
+                  }}
+                  maxDuration={10}
+                />
+              )}
             </div>
 
             {/* Preview Checkbox */}
@@ -361,6 +403,7 @@ export default function Home() {
                   setFile(null);
                   setTextInput("");
                   setSpeakerFile(null);
+                  setVoiceInputMethod("upload");
                   setAudioUrl(null);
                   setStatus(null);
                   setJobId(null);
@@ -412,8 +455,8 @@ export default function Home() {
                         </td>
                         <td className="px-6 py-4 border-r-4 border-border">
                           <span className={`px-3 py-1 font-bold border-2 border-border text-xs uppercase ${job.status === "completed" ? "bg-green-300 text-black" :
-                              job.status === "failed" ? "bg-red-300 text-black" :
-                                "bg-blue-300 text-black"
+                            job.status === "failed" ? "bg-red-300 text-black" :
+                              "bg-blue-300 text-black"
                             }`}>
                             {job.status}
                           </span>
