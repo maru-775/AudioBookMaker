@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     DEVICE: str = "auto"  # auto, cuda, mps, cpu
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+    KEEP_MODEL_LOADED: bool = False  # Set to True for performance, False for cost/RAM
+    API_BASE_URL: str = "http://localhost:8000"  # For RSS feed links
 
     class Config:
         env_file = ".env"

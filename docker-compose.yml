@@ -1,21 +1,25 @@
-version: '3.8'
-
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.api
     ports:
       - "8000:8000"
     volumes:
       - ./backend/audiobooks:/app/audiobooks
       - ./backend/src:/app/src
-      - ./backend/jobs.db:/app/jobs.db
     environment:
-      - DEVICE=auto # Change to cuda if GPU available
-      - COQUI_TOS_AGREED=1
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - API_BASE_URL=http://localhost:8000
     depends_on:
       - redis
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   frontend:
     build:
@@ -32,19 +36,32 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
 
   worker:
-    build: ./backend
-    command: celery -A src.core.worker.celery_app worker --loglevel=info
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
     volumes:
       - ./backend/audiobooks:/app/audiobooks
       - ./backend/src:/app/src
-      - ./backend/jobs.db:/app/jobs.db
     environment:
       - DEVICE=auto
       - COQUI_TOS_AGREED=1
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - KEEP_MODEL_LOADED=false
     depends_on:
       - redis
-      - backend
+    # Scale with: docker compose up --scale worker=3
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+
+volumes:
+  redis_data:

@@ -1,5 +1,5 @@
 from celery import Celery
-from src.config import settings
+from src.shared.config import settings
 
 celery_app = Celery(
     "audiobook_maker",
@@ -13,4 +13,10 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    # Task routing - all tasks go to default queue
+    task_routes={
+        "worker.*": {"queue": "audiobook_tasks"},
+    },
+    # Default queue for workers
+    task_default_queue="audiobook_tasks",
 )

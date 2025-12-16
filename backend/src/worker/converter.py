@@ -1,3 +1,7 @@
+"""
+Converter module - handles TTS generation and audio processing.
+This module contains all heavy ML dependencies (torch, TTS).
+"""
 import os
 import torch
 import ebooklib
@@ -8,9 +12,9 @@ import glob
 import re
 import subprocess
 from TTS.api import TTS
-from src.config import settings
-from src.utils.logger import setup_logger
-from src.core.text_processor import preprocess_text
+from src.shared.config import settings
+from src.shared.logger import setup_logger
+from src.shared.text_processor import preprocess_text
 
 logger = setup_logger(__name__)
 
@@ -19,7 +23,7 @@ class AudioBookConverter:
         self.output_dir = settings.OUTPUT_DIR
         os.makedirs(self.output_dir, exist_ok=True)
         self.device = self._setup_device()
-        self.tts_model = self._load_model()
+        self.tts_model = None
 
     def _setup_device(self):
         if settings.DEVICE != "auto":
@@ -35,18 +39,31 @@ class AudioBookConverter:
             logger.info("No GPU detected. Using CPU.")
             return torch.device("cpu")
 
-    def _load_model(self):
+    def load_model(self):
+        if self.tts_model is not None:
+            return
+
         logger.info("Attempting to load TTS model...")
         try:
-            model = TTS(
+            self.tts_model = TTS(
                 model_name=settings.MODEL_NAME,
                 progress_bar=False
             ).to(self.device)
             logger.info("TTS model loaded successfully")
-            return model
         except Exception as e:
             logger.error(f"Failed to load TTS model: {e}")
             raise
+
+    def unload_model(self):
+        if self.tts_model is not None:
+            logger.info("Unloading TTS model to free memory...")
+            del self.tts_model
+            self.tts_model = None
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+            logger.info("TTS model unloaded")
 
     def extract_text_from_epub(self, epub_path):
         try:
@@ -55,7 +72,6 @@ class AudioBookConverter:
             for item in book.get_items():
                 if item.get_type() == ebooklib.ITEM_DOCUMENT:
                     soup = BeautifulSoup(item.get_content(), 'html.parser')
-                    text_content.append(soup.get_text())
                     text_content.append(soup.get_text())
             full_text = '\n\n'.join(text_content)
             logger.info(f"Extracted {len(full_text)} characters from EPUB.")
@@ -71,8 +87,6 @@ class AudioBookConverter:
                 text_content = []
                 for page in reader.pages:
                     text_content.append(page.extract_text())
-                for page in reader.pages:
-                    text_content.append(page.extract_text())
             full_text = '\n\n'.join(text_content)
             logger.info(f"Extracted {len(full_text)} characters from PDF.")
             return full_text
@@ -81,6 +95,7 @@ class AudioBookConverter:
             raise
 
     def generate_audio(self, text_blocks, book_title, speaker_wav="sample.wav", language="en", preview=False, progress_callback=None):
+        self.load_model()
         output_filename = f"{book_title}_audiobook.mp3"
         output_path = os.path.join(self.output_dir, output_filename)
         
@@ -92,8 +107,6 @@ class AudioBookConverter:
                 speaker_wav = potential_samples[0]
                 logger.warning(f"Speaker file not found. Using {speaker_wav} as fallback.")
             else:
-                # If we are in a container, maybe there is a default asset?
-                # For now, we will just log an error but try to proceed if the model allows (it won't for XTTS)
                 raise FileNotFoundError(f"Speaker reference file '{speaker_wav}' not found. Please upload a voice sample.")
 
         if preview:
@@ -124,10 +137,6 @@ class AudioBookConverter:
             logger.info(f"Concatenating {len(temp_audio_files)} audio files")
             output_path = self._concatenate_audio_files(temp_audio_files, output_path)
             
-            # Cleanup
-            # for temp_file in temp_audio_files:
-            #     os.remove(temp_file)
-                
             return output_path
             
         except Exception as e:
@@ -156,7 +165,7 @@ class AudioBookConverter:
                     "-i", list_file,
                     "-c:a", "libmp3lame",
                     "-b:a", "128k",
-                    "-y", # Overwrite output file
+                    "-y",
                     output_file
                 ]
                 subprocess.run(command, check=True)
@@ -168,17 +177,15 @@ class AudioBookConverter:
                     os.remove(list_file)
         else:
             # Fallback: Concatenate WAVs using python wave module
-            # Note: Output will be WAV, not MP3
             import wave
             
-            # Change output extension to .wav if it was .mp3
             if output_file.endswith('.mp3'):
                 output_file = output_file[:-4] + '.wav'
                 
             data = []
             for infile in input_files:
                 w = wave.open(infile, 'rb')
-                data.append( [w.getparams(), w.readframes(w.getnframes())] )
+                data.append([w.getparams(), w.readframes(w.getnframes())])
                 w.close()
             
             output = wave.open(output_file, 'wb')
@@ -187,14 +194,6 @@ class AudioBookConverter:
                 output.writeframes(data[i][1])
             output.close()
             logger.info(f"Concatenated audio saved to {output_file} (WAV format)")
-            
-            # Update the output path in the calling function if possible, 
-            # but here we just ensure the file exists at the new path.
-            # The calling function expects 'output_path' to be the file.
-            # Since we changed the extension, we need to handle that.
-            # But this method doesn't return anything. 
-            # We should probably return the actual output path.
-            return output_file
             
         return output_file
 

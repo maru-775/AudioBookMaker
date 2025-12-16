@@ -1,0 +1,30 @@
+# Lightweight API Dockerfile
+# Image size: ~200-300MB (no ML dependencies)
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# No need for ffmpeg or build tools in API
+RUN apt-get update && apt-get install -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy API-specific requirements
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt
+
+# Copy source code
+COPY src/ ./src/
+
+# Create audiobooks directory for shared volume
+RUN mkdir -p audiobooks
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
+
+# Run the API
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
